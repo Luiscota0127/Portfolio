@@ -19,7 +19,9 @@ public class CollaborationService : IAsyncDisposable
     public event Func<object, Task>? OnTaskUpdated;
     public event Func<Guid, Task>? OnTaskDeleted;
 
-    private readonly ApiAuthService _authService;
+        private readonly ApiAuthService _authService;
+
+        public enum ConnectionState { Connected, Reconnecting, Disconnected }
 
     public CollaborationService(NavigationManager nav, ILogger<CollaborationService> logger, ApiAuthService authService)
     {
