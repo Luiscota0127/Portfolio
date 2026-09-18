@@ -24,7 +24,9 @@ public class TokenService : ITokenService
     public string CreateToken(ApplicationUser user)
     {
         var jwtSection = _configuration.GetSection("Jwt");
-        var key = jwtSection.GetValue<string>("Key") ?? string.Empty;
+        var key = jwtSection.GetValue<string>("Key");
+        // fallback to a development key when configuration is missing (tests / dev local)
+        if (string.IsNullOrEmpty(key)) key = "ReplaceThisWithASecretKeyForDev";
         var issuer = jwtSection.GetValue<string>("Issuer") ?? "AspireApp";
         var audience = jwtSection.GetValue<string>("Audience") ?? "AspireAppClients";
         var lifetime = jwtSection.GetValue<int?>("TokenLifetimeMinutes") ?? 60;
@@ -36,7 +38,19 @@ public class TokenService : ITokenService
             new Claim("displayName", user.DisplayName ?? string.Empty)
         };
 
-        var keyBytes = Encoding.UTF8.GetBytes(key);
+        // Ensure signing key has sufficient length: derive a 32-byte key via SHA256 when needed
+        byte[] keyBytesRaw = Encoding.UTF8.GetBytes(key);
+        byte[] keyBytes;
+        if (keyBytesRaw.Length < 32)
+        {
+            using var sha = System.Security.Cryptography.SHA256.Create();
+            keyBytes = sha.ComputeHash(keyBytesRaw);
+        }
+        else
+        {
+            keyBytes = keyBytesRaw;
+        }
+
         var signingKey = new SymmetricSecurityKey(keyBytes);
         var creds = new SigningCredentials(signingKey, SecurityAlgorithms.HmacSha256);
 

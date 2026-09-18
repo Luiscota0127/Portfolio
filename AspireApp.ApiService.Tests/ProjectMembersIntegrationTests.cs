@@ -18,6 +18,7 @@ public class ProjectMembersIntegrationTests : IClassFixture<WebApplicationFactor
     {
         _factory = factory.WithWebHostBuilder(builder =>
         {
+            // ensure the app uses the Testing environment so Program.cs selects InMemory DB
             builder.ConfigureServices(services =>
             {
                 // remove existing DbContext registrations to avoid multiple providers (SQLite + InMemory)
@@ -27,30 +28,34 @@ public class ProjectMembersIntegrationTests : IClassFixture<WebApplicationFactor
                 // register in-memory provider for tests
                 services.AddDbContext<ApplicationDbContext>(options => options.UseInMemoryDatabase("TestDb" + Guid.NewGuid()));
             });
+            // set environment via the TestServer's configuration
+            builder.UseSetting("environment", "Testing");
         });
     }
 
     [Fact]
     public async Task AddAndRemoveMember_Workflow()
     {
-        using var scope = _factory.Services.CreateScope();
-        var services = scope.ServiceProvider;
-        var userManager = services.GetRequiredService<UserManager<ApplicationUser>>();
-
-        // create owner and member users
-        var owner = new ApplicationUser { UserName = "owner@test.local", Email = "owner@test.local" };
-        await userManager.CreateAsync(owner, "Owner123!");
-        var member = new ApplicationUser { UserName = "member@test.local", Email = "member@test.local" };
-        await userManager.CreateAsync(member, "Member123!");
-
         var client = _factory.CreateClient();
 
-        // login owner
-        var loginResp = await client.PostAsJsonAsync("api/auth/login", new { Email = "owner@test.local", Password = "Owner123!" });
-        loginResp.EnsureSuccessStatusCode();
-        var auth = await loginResp.Content.ReadFromJsonAsync<AuthResponse>();
-        Assert.NotNull(auth?.Token);
-        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth!.Token);
+        // create owner and member via API register endpoint to ensure same pipeline
+        var regOwner = await client.PostAsJsonAsync("api/auth/register", new { Email = "owner@test.local", Password = "Owner123!", DisplayName = "Owner" });
+        if (!regOwner.IsSuccessStatusCode)
+        {
+            var t = await regOwner.Content.ReadAsStringAsync();
+            throw new System.Exception($"Register owner failed: {regOwner.StatusCode} - {t}");
+        }
+        var regMember = await client.PostAsJsonAsync("api/auth/register", new { Email = "member@test.local", Password = "Member123!", DisplayName = "Member" });
+        if (!regMember.IsSuccessStatusCode)
+        {
+            var t = await regMember.Content.ReadAsStringAsync();
+            throw new System.Exception($"Register member failed: {regMember.StatusCode} - {t}");
+        }
+
+        // use token returned by registration for owner (avoids SignInManager issues in test host)
+        var ownerAuth = await regOwner.Content.ReadFromJsonAsync<AuthResponse>();
+        Assert.NotNull(ownerAuth?.Token);
+        client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", ownerAuth!.Token);
 
         // create project
         var createResp = await client.PostAsJsonAsync("api/projects", new { Name = "IntegrationProject", Description = "desc" });

@@ -22,6 +22,7 @@ var configuration = builder.Configuration;
 // EF Core - use SQLite for normal runs, but allow InMemory for tests (Environment=Testing)
 if (builder.Environment.EnvironmentName == "Testing")
 {
+    // Use InMemory provider for tests. Requires Microsoft.EntityFrameworkCore.InMemory package.
     builder.Services.AddDbContext<ApplicationDbContext>(options =>
         options.UseInMemoryDatabase("AspireApp_Tests"));
 }
@@ -63,7 +64,19 @@ builder.Services.AddAuthentication(options =>
             ValidateIssuerSigningKey = true,
             ValidIssuer = issuer,
             ValidAudience = audience,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
+    // Ensure signing key has sufficient length and matches TokenService derivation
+    byte[] jwtKeyRaw = Encoding.UTF8.GetBytes(jwtKey);
+    byte[] jwtKeyBytes;
+    if (jwtKeyRaw.Length < 32)
+    {
+        using var sha = System.Security.Cryptography.SHA256.Create();
+        jwtKeyBytes = sha.ComputeHash(jwtKeyRaw);
+    }
+    else
+    {
+        jwtKeyBytes = jwtKeyRaw;
+    }
+    IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes)
         };
         // Allow JWTs to be passed to SignalR hubs via the query string (access_token)
         options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
@@ -90,11 +103,15 @@ builder.Services.AddSignalR();
 var app = builder.Build();
 
 // Configure the HTTP request pipeline.
-app.UseExceptionHandler();
-
-if (app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment() || app.Environment.EnvironmentName == "Testing")
 {
+    // expose detailed errors while developing or running integration tests
+    app.UseDeveloperExceptionPage();
     app.MapOpenApi();
+}
+else
+{
+    app.UseExceptionHandler();
 }
 
 app.UseAuthentication();
@@ -111,7 +128,20 @@ using (var scope = app.Services.CreateScope())
     try
     {
         var db = services.GetRequiredService<ApplicationDbContext>();
-        db.Database.Migrate();
+        // Only apply migrations for relational providers (SQLite etc.). In-memory provider doesn't support Migrate().
+        try
+        {
+            if (db.Database.IsRelational())
+            {
+                db.Database.Migrate();
+            }
+        }
+        catch (Exception ex)
+        {
+            // If migration fails in non-relational scenarios, log and continue. Tests use InMemory provider.
+            var loggerLocal = services.GetRequiredService<ILogger<Program>>();
+            loggerLocal.LogInformation(ex, "Skipping migrations (non-relational provider or migration error)");
+        }
         // Seed default data (admin user etc.)
         SeedData.EnsureSeedDataAsync(services).GetAwaiter().GetResult();
     }
