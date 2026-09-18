@@ -1,4 +1,4 @@
-name: .NET CI
+name: CI
 
 on:
   push:
@@ -7,28 +7,36 @@ on:
     branches: [ "main", "master" ]
 
 jobs:
-  build:
-    runs-on: ubuntu-latest
+  build-and-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
 
     steps:
-    - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
-    - name: Setup .NET
-      uses: actions/setup-dotnet@v4
-      with:
-        dotnet-version: '10.0.x'
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0.x'
 
-    - name: Restore
-      run: dotnet restore AspireApp.slnx
+      - name: Restore
+        run: dotnet restore AspireApp.slnx
 
-    - name: Build
-      run: dotnet build AspireApp.slnx --configuration Release --no-restore
+      - name: Build
+        run: dotnet build AspireApp.slnx --configuration Release --no-restore
 
-    - name: Run tests
-      run: |
-        dotnet test AspireApp.ApiService.Tests/AspireApp.ApiService.Tests.csproj --no-build --verbosity normal
+      - name: Run tests (ApiService.Tests)
+        run: dotnet test AspireApp.ApiService.Tests/AspireApp.ApiService.Tests.csproj --no-build -c Release --verbosity minimal
 
-    - name: Publish API Docker image
-      if: github.event_name == 'push'
-      run: |
-        echo "Skipping Docker build in CI by default. Configure registry and secrets to publish images."
+      - name: Run tests (solution)
+        run: dotnet test AspireApp.slnx --no-build -c Release --verbosity minimal
+
+  publish-placeholder:
+    runs-on: ubuntu-latest
+    needs: build-and-test
+    if: github.event_name == 'push'
+    steps:
+      - name: Publish placeholder
+        run: echo "No publishing configured. Add registry/secrets to enable publishing."

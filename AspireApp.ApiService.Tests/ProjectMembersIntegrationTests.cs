@@ -25,8 +25,8 @@ public class ProjectMembersIntegrationTests : IClassFixture<WebApplicationFactor
                 var descriptors = services.Where(d => d.ServiceType == typeof(DbContextOptions<ApplicationDbContext>) || d.ServiceType == typeof(ApplicationDbContext)).ToList();
                 foreach (var d in descriptors) services.Remove(d);
 
-                // register in-memory provider for tests
-                services.AddDbContext<ApplicationDbContext>(options => options.UseInMemoryDatabase("TestDb" + Guid.NewGuid()));
+                // register in-memory provider for tests (use fixed name to share DB across app and test scopes)
+                services.AddDbContext<ApplicationDbContext>(options => options.UseInMemoryDatabase("AspireApp_Tests"));
             });
             // set environment via the TestServer's configuration
             builder.UseSetting("environment", "Testing");

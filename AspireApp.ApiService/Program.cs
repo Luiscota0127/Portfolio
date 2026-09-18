@@ -47,6 +47,19 @@ var jwtKey = jwtSection.GetValue<string>("Key") ?? "ReplaceThisWithASecretKeyFor
 var issuer = jwtSection.GetValue<string>("Issuer") ?? "AspireApp";
 var audience = jwtSection.GetValue<string>("Audience") ?? "AspireAppClients";
 
+// derive a fixed-length signing key bytes to ensure compatibility between token creation and validation
+byte[] jwtKeyRaw = Encoding.UTF8.GetBytes(jwtKey);
+byte[] jwtKeyBytes;
+if (jwtKeyRaw.Length < 32)
+{
+    using var sha = System.Security.Cryptography.SHA256.Create();
+    jwtKeyBytes = sha.ComputeHash(jwtKeyRaw);
+}
+else
+{
+    jwtKeyBytes = jwtKeyRaw;
+}
+
 builder.Services.AddAuthentication(options =>
 {
     options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
@@ -64,19 +77,8 @@ builder.Services.AddAuthentication(options =>
             ValidateIssuerSigningKey = true,
             ValidIssuer = issuer,
             ValidAudience = audience,
-    // Ensure signing key has sufficient length and matches TokenService derivation
-    byte[] jwtKeyRaw = Encoding.UTF8.GetBytes(jwtKey);
-    byte[] jwtKeyBytes;
-    if (jwtKeyRaw.Length < 32)
-    {
-        using var sha = System.Security.Cryptography.SHA256.Create();
-        jwtKeyBytes = sha.ComputeHash(jwtKeyRaw);
-    }
-    else
-    {
-        jwtKeyBytes = jwtKeyRaw;
-    }
-    IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes)
+            // Use the derived jwtKeyBytes computed earlier and set as issuer signing key
+            IssuerSigningKey = new SymmetricSecurityKey(jwtKeyBytes),
         };
         // Allow JWTs to be passed to SignalR hubs via the query string (access_token)
         options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents

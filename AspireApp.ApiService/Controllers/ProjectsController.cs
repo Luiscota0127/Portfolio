@@ -14,11 +14,13 @@ public class ProjectsController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
     private readonly Microsoft.AspNetCore.SignalR.IHubContext<AspireApp.ApiService.Hubs.CollaborationHub> _hub;
+    private readonly ILogger<ProjectsController> _logger;
 
-    public ProjectsController(ApplicationDbContext db, Microsoft.AspNetCore.SignalR.IHubContext<AspireApp.ApiService.Hubs.CollaborationHub> hub)
+    public ProjectsController(ApplicationDbContext db, Microsoft.AspNetCore.SignalR.IHubContext<AspireApp.ApiService.Hubs.CollaborationHub> hub, ILogger<ProjectsController> logger)
     {
         _db = db;
         _hub = hub;
+        _logger = logger;
     }
 
     [HttpGet]
@@ -39,6 +41,8 @@ public class ProjectsController : ControllerBase
     [HttpPost]
     public async Task<IActionResult> Create([FromBody] ProjectCreateDto dto)
     {
+        _logger.LogInformation("Create project called. UserAuthenticated={IsAuthenticated}", User?.Identity?.IsAuthenticated ?? false);
+        _logger.LogInformation("Claims: {Claims}", string.Join(';', User?.Claims.Select(c => c.Type + "=" + c.Value) ?? Array.Empty<string>()));
         var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
         var project = new Project { Name = dto.Name, Description = dto.Description, OwnerId = userId };
         _db.Projects.Add(project);
@@ -104,7 +108,10 @@ public class ProjectsController : ControllerBase
         await _db.SaveChangesAsync();
 
         await _hub.Clients.All.SendCoreAsync("ProjectMemberAdded", new object[] { id, user.Id, member.Role });
-        return Ok(member);
+
+        // return a DTO to avoid serializing EF navigation properties (prevents circular-reference errors)
+        var resultDto = new AspireApp.ApiService.Dto.ProjectMemberDto(member.Id, member.ProjectId, member.UserId, user.Email, member.Role);
+        return Ok(resultDto);
     }
 
     [HttpDelete("{id:guid}/members/{memberId:guid}")]
