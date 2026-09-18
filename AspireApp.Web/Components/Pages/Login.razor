@@ -1,0 +1,32 @@
+@page "/login"
+@inject AspireApp.Web.Services.ApiAuthService AuthService
+@inject NavigationManager Nav
+
+<h3>Login</h3>
+
+<EditForm Model="model" OnValidSubmit="HandleLogin">
+    <InputText @bind-Value="model.Email" placeholder="Email" />
+    <InputText @bind-Value="model.Password" placeholder="Password" type="password" />
+    <button type="submit">Login</button>
+</EditForm>
+
+@code {
+    private LoginModel model = new();
+
+    private async Task HandleLogin()
+    {
+        var ok = await AuthService.LoginAsync(model.Email, model.Password);
+        if (ok) Nav.NavigateTo("/dashboard");
+        else
+        {
+            // simple error handling
+            Console.WriteLine("Login failed");
+        }
+    }
+
+    private class LoginModel
+    {
+        public string Email { get; set; } = string.Empty;
+        public string Password { get; set; } = string.Empty;
+    }
+}

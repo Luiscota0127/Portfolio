@@ -1,0 +1,27 @@
+@page "/dashboard"
+@inject AspireApp.Web.Services.ApiAuthService AuthService
+
+<h3>Dashboard</h3>
+
+@if (projects == null)
+{
+    <p>No projects or authentication required.</p>
+}
+else
+{
+    <ul>
+        @foreach (var p in projects)
+        {
+            <li>@p.Name - @p.Description</li>
+        }
+    </ul>
+}
+
+@code {
+    private AspireApp.Web.Services.ApiAuthService.ProjectDto[]? projects;
+
+    protected override async Task OnInitializedAsync()
+    {
+        projects = await AuthService.GetProjectsAsync();
+    }
+}
