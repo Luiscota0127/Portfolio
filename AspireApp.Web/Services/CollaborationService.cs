@@ -6,6 +6,8 @@ namespace AspireApp.Web.Services;
 
 public class CollaborationService : IAsyncDisposable
 {
+        public event Func<ConnectionState, Task>? OnConnectionChanged;
+
     private readonly HubConnection _hub;
     private readonly ILogger<CollaborationService> _logger;
 
@@ -41,7 +43,7 @@ public class CollaborationService : IAsyncDisposable
         _hub.On<Guid>("TaskDeleted", async id => await (OnTaskDeleted?.Invoke(id) ?? Task.CompletedTask));
     }
 
-    public async Task StartAsync()
+        public async Task StartAsync()
     {
         try
         {
@@ -49,14 +51,28 @@ public class CollaborationService : IAsyncDisposable
             await _authService.TryRefreshTokenAsync();
 
             // start connection and resubscribe to default groups if necessary
-            await _hub.StartAsync();
+                await _hub.StartAsync();
+                await NotifyConnectionChanged(ConnectionState.Connected);
             // TODO: if the app uses group subscriptions, call server methods to rejoin groups here
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error starting hub connection");
+                await NotifyConnectionChanged(ConnectionState.Disconnected);
         }
     }
+
+        private async Task NotifyConnectionChanged(ConnectionState state)
+        {
+            try
+            {
+                if (OnConnectionChanged != null) await OnConnectionChanged.Invoke(state);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error delivering connection state");
+            }
+        }
 
     public async ValueTask DisposeAsync()
     {

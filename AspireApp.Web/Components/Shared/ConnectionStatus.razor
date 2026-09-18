@@ -1,0 +1,35 @@
+@inject AspireApp.Web.Services.CollaborationService Collab
+
+<div class="connection-status">
+    @if (state == ConnectionState.Connected)
+    {
+        <span class="badge bg-success">Connected</span>
+    }
+    else if (state == ConnectionState.Reconnecting)
+    {
+        <span class="badge bg-warning">Reconnecting...</span>
+    }
+    else
+    {
+        <span class="badge bg-danger">Disconnected</span>
+    }
+</div>
+
+@code{
+    private ConnectionState state = ConnectionState.Disconnected;
+
+    protected override async Task OnInitializedAsync()
+    {
+        Collab.OnConnectionChanged += OnConnChanged;
+        await Collab.StartAsync();
+    }
+
+    private Task OnConnChanged(ConnectionState s)
+    {
+        state = s;
+        InvokeAsync(StateHasChanged);
+        return Task.CompletedTask;
+    }
+
+    public enum ConnectionState { Connected, Reconnecting, Disconnected }
+}
