@@ -29,7 +29,7 @@ public class CollaborationService : IAsyncDisposable
             {
                 options.AccessTokenProvider = () => Task.FromResult(_authService.JwtToken);
             })
-            .WithAutomaticReconnect()
+            .WithAutomaticReconnect(new[] { TimeSpan.Zero, TimeSpan.FromSeconds(2), TimeSpan.FromSeconds(10), TimeSpan.FromSeconds(30) })
             .Build();
 
         _hub.On<Guid>("ProjectDeleted", async id => await (OnProjectDeleted?.Invoke(id) ?? Task.CompletedTask));
@@ -45,6 +45,11 @@ public class CollaborationService : IAsyncDisposable
     {
         try
         {
+            // attempt refresh before starting connection
+            if (await _authService.TryRefreshTokenAsync())
+            {
+                // updated token may be set
+            }
             await _hub.StartAsync();
         }
         catch (Exception ex)

@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
 using System.Text.Json;
+using System.Text;
 
 namespace AspireApp.Web.Services;
 
@@ -42,6 +43,44 @@ public class ApiAuthService
         {
             // ignore storage errors
         }
+    }
+
+    private static DateTimeOffset? GetExpiryFromToken(string? token)
+    {
+        if (string.IsNullOrEmpty(token)) return null;
+        try
+        {
+            var parts = token.Split('.');
+            if (parts.Length < 2) return null;
+            var payload = parts[1];
+            // pad base64
+            payload = payload.Replace('-', '+').Replace('_', '/');
+            switch (payload.Length % 4)
+            {
+                case 2: payload += "=="; break;
+                case 3: payload += "="; break;
+            }
+            var bytes = Convert.FromBase64String(payload);
+            var json = Encoding.UTF8.GetString(bytes);
+            using var doc = JsonDocument.Parse(json);
+            if (doc.RootElement.TryGetProperty("exp", out var expEl))
+            {
+                var seconds = expEl.GetInt64();
+                return DateTimeOffset.FromUnixTimeSeconds(seconds);
+            }
+        }
+        catch
+        {
+            // ignore parse errors
+        }
+        return null;
+    }
+
+    private bool IsTokenExpiringSoon(TimeSpan threshold)
+    {
+        var exp = GetExpiryFromToken(JwtToken);
+        if (exp == null) return true;
+        return exp <= DateTimeOffset.UtcNow.Add(threshold);
     }
 
     private HttpClient CreateClient()
@@ -118,8 +157,8 @@ public class ApiAuthService
         await _refreshLock.WaitAsync();
         try
         {
-            // If another request already refreshed the token, skip calling API again
-            if (!string.IsNullOrEmpty(JwtToken))
+            // If token exists and is not expiring soon, skip refresh
+            if (!string.IsNullOrEmpty(JwtToken) && !IsTokenExpiringSoon(TimeSpan.FromSeconds(60)))
                 return true;
 
             var client = _httpFactory.CreateClient("ApiClientNoAuth");
