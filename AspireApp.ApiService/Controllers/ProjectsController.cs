@@ -49,6 +49,8 @@ public class ProjectsController : ControllerBase
         await _db.SaveChangesAsync();
         // notify clients
         await _hub.Clients.All.SendCoreAsync("ProjectCreated", new object[] { new AspireApp.ApiService.Dto.ProjectCollabDto(project.Id, project.Name, project.Description) });
+        // notify project group subscribers
+        await _hub.Clients.Group($"project-{project.Id}").SendCoreAsync("ProjectCreated", new object[] { new AspireApp.ApiService.Dto.ProjectCollabDto(project.Id, project.Name, project.Description) });
         return CreatedAtAction(nameof(Get), new { id = project.Id }, project);
     }
 
@@ -67,6 +69,7 @@ public class ProjectsController : ControllerBase
         project.Description = dto.Description;
         await _db.SaveChangesAsync();
         await _hub.Clients.All.SendCoreAsync("ProjectUpdated", new object[] { new AspireApp.ApiService.Dto.ProjectCollabDto(project.Id, project.Name, project.Description) });
+        await _hub.Clients.Group($"project-{project.Id}").SendCoreAsync("ProjectUpdated", new object[] { new AspireApp.ApiService.Dto.ProjectCollabDto(project.Id, project.Name, project.Description) });
         return NoContent();
     }
 
@@ -83,6 +86,7 @@ public class ProjectsController : ControllerBase
         _db.Projects.Remove(project);
         await _db.SaveChangesAsync();
         await _hub.Clients.All.SendCoreAsync("ProjectDeleted", new object[] { id });
+        await _hub.Clients.Group($"project-{id}").SendCoreAsync("ProjectDeleted", new object[] { id });
         return NoContent();
     }
 
@@ -108,6 +112,7 @@ public class ProjectsController : ControllerBase
         await _db.SaveChangesAsync();
 
         await _hub.Clients.All.SendCoreAsync("ProjectMemberAdded", new object[] { id, user.Id, member.Role });
+        await _hub.Clients.Group($"project-{id}").SendCoreAsync("ProjectMemberAdded", new object[] { id, user.Id, member.Role });
 
         // return a DTO to avoid serializing EF navigation properties (prevents circular-reference errors)
         var resultDto = new AspireApp.ApiService.Dto.ProjectMemberDto(member.Id, member.ProjectId, member.UserId, user.Email, member.Role);
@@ -131,6 +136,7 @@ public class ProjectsController : ControllerBase
         await _db.SaveChangesAsync();
 
         await _hub.Clients.All.SendCoreAsync("ProjectMemberRemoved", new object[] { id, member.UserId });
+        await _hub.Clients.Group($"project-{id}").SendCoreAsync("ProjectMemberRemoved", new object[] { id, member.UserId });
         return NoContent();
     }
 

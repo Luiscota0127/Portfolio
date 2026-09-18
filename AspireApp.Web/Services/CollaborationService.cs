@@ -46,23 +46,23 @@ public class CollaborationService : IAsyncDisposable
     }
 
         public async Task StartAsync()
-    {
-        try
         {
-            // attempt refresh before starting connection
-            await _authService.TryRefreshTokenAsync();
+            try
+            {
+                // attempt refresh before starting connection
+                await _authService.TryRefreshTokenAsync();
 
-            // start connection and resubscribe to default groups if necessary
+                // start connection and resubscribe to default groups if necessary
                 await _hub.StartAsync();
                 await NotifyConnectionChanged(ConnectionState.Connected);
-            // TODO: if the app uses group subscriptions, call server methods to rejoin groups here
-        }
-        catch (Exception ex)
-        {
-            _logger.LogError(ex, "Error starting hub connection");
+                // TODO: if the app uses group subscriptions, call server methods to rejoin groups here
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error starting hub connection");
                 await NotifyConnectionChanged(ConnectionState.Disconnected);
+            }
         }
-    }
 
         private async Task NotifyConnectionChanged(ConnectionState state)
         {
