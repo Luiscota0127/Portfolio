@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authorization;
 using AspireApp.ApiService.Data;
 using AspireApp.ApiService.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Security.Claims;
 
 namespace AspireApp.ApiService.Controllers;
 
@@ -12,10 +13,12 @@ namespace AspireApp.ApiService.Controllers;
 public class TasksController : ControllerBase
 {
     private readonly ApplicationDbContext _db;
+    private readonly Microsoft.AspNetCore.SignalR.IHubContext<AspireApp.ApiService.Hubs.CollaborationHub> _hub;
 
-    public TasksController(ApplicationDbContext db)
+    public TasksController(ApplicationDbContext db, Microsoft.AspNetCore.SignalR.IHubContext<AspireApp.ApiService.Hubs.CollaborationHub> hub)
     {
         _db = db;
+        _hub = hub;
     }
 
     [HttpGet]
@@ -39,9 +42,11 @@ public class TasksController : ControllerBase
         var project = await _db.Projects.FindAsync(dto.ProjectId);
         if (project == null) return BadRequest("Project not found");
 
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
         var task = new TaskItem { Title = dto.Title, Description = dto.Description, ProjectId = dto.ProjectId, AssignedToId = dto.AssignedToId };
         _db.Tasks.Add(task);
         await _db.SaveChangesAsync();
+        await _hub.Clients.All.SendCoreAsync("TaskCreated", new object[] { new AspireApp.ApiService.Dto.TaskCollabDto(task.Id, task.Title, task.Description, (int)task.Status, task.ProjectId, task.AssignedToId) });
         return CreatedAtAction(nameof(Get), new { id = task.Id }, task);
     }
 
@@ -50,12 +55,21 @@ public class TasksController : ControllerBase
     {
         var task = await _db.Tasks.FindAsync(id);
         if (task == null) return NotFound();
+        // allow only assigned user, project owner or admin
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
+        var isAdmin = User.IsInRole("Admin");
+        var project = await _db.Projects.FindAsync(task.ProjectId);
+        var isOwner = project != null && project.OwnerId == userId;
+        if (!isAdmin && task.AssignedToId != userId && !isOwner)
+            return Forbid();
+
         task.Title = dto.Title;
         task.Description = dto.Description;
         task.Status = dto.Status;
         task.DueDate = dto.DueDate;
         task.AssignedToId = dto.AssignedToId;
         await _db.SaveChangesAsync();
+        await _hub.Clients.All.SendCoreAsync("TaskUpdated", new object[] { new AspireApp.ApiService.Dto.TaskCollabDto(task.Id, task.Title, task.Description, (int)task.Status, task.ProjectId, task.AssignedToId) });
         return NoContent();
     }
 
@@ -64,11 +78,19 @@ public class TasksController : ControllerBase
     {
         var task = await _db.Tasks.FindAsync(id);
         if (task == null) return NotFound();
+        var userId = User.FindFirstValue(ClaimTypes.NameIdentifier) ?? User.Identity?.Name;
+        var isAdmin = User.IsInRole("Admin");
+        var project = await _db.Projects.FindAsync(task.ProjectId);
+        var isOwner = project != null && project.OwnerId == userId;
+        if (!isAdmin && task.AssignedToId != userId && !isOwner)
+            return Forbid();
+
         _db.Tasks.Remove(task);
         await _db.SaveChangesAsync();
+        await _hub.Clients.All.SendCoreAsync("TaskDeleted", new object[] { id });
         return NoContent();
     }
 }
 
 public record TaskCreateDto(Guid ProjectId, string Title, string? Description, string? AssignedToId);
-public record TaskUpdateDto(string Title, string? Description, TaskStatus Status, DateTime? DueDate, string? AssignedToId);
+public record TaskUpdateDto(string Title, string? Description, AspireApp.ApiService.Models.TaskStatus Status, DateTime? DueDate, string? AssignedToId);

@@ -19,9 +19,18 @@ builder.Services.AddOpenApi();
 // Configuration
 var configuration = builder.Configuration;
 
-// EF Core - SQLite for local development
-builder.Services.AddDbContext<ApplicationDbContext>(options =>
-    options.UseSqlite(configuration.GetConnectionString("DefaultConnection")));
+// EF Core - use SQLite for normal runs, but allow InMemory for tests (Environment=Testing)
+if (builder.Environment.EnvironmentName == "Testing")
+{
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseInMemoryDatabase("AspireApp_Tests"));
+}
+else
+{
+    // SQLite for local development
+    builder.Services.AddDbContext<ApplicationDbContext>(options =>
+        options.UseSqlite(configuration.GetConnectionString("DefaultConnection")));
+}
 
 // Identity
 builder.Services.AddIdentity<ApplicationUser, IdentityRole>(options =>
@@ -56,11 +65,27 @@ builder.Services.AddAuthentication(options =>
             ValidAudience = audience,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey))
         };
+        // Allow JWTs to be passed to SignalR hubs via the query string (access_token)
+        options.Events = new Microsoft.AspNetCore.Authentication.JwtBearer.JwtBearerEvents
+        {
+            OnMessageReceived = context =>
+            {
+                var accessToken = context.Request.Query["access_token"].FirstOrDefault();
+                var path = context.HttpContext.Request.Path;
+                if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/hubs"))
+                {
+                    context.Token = accessToken;
+                }
+                return Task.CompletedTask;
+            }
+        };
     });
 
 builder.Services.AddAuthorization();
 builder.Services.AddControllers();
 builder.Services.AddScoped<ITokenService, TokenService>();
+// SignalR
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
@@ -76,6 +101,7 @@ app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();
+app.MapHub<AspireApp.ApiService.Hubs.CollaborationHub>("/hubs/collab");
 app.MapDefaultEndpoints();
 
 // Ensure database is created and apply migrations at startup (development)

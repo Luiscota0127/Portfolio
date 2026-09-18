@@ -10,6 +10,7 @@ public static class SeedData
     {
         using var scope = services.CreateScope();
         var userManager = scope.ServiceProvider.GetRequiredService<UserManager<ApplicationUser>>();
+        var roleManager = scope.ServiceProvider.GetRequiredService<RoleManager<IdentityRole>>();
 
         var adminEmail = "admin@aspireapp.local";
         var admin = await userManager.FindByEmailAsync(adminEmail);
@@ -17,6 +18,18 @@ public static class SeedData
         {
             admin = new ApplicationUser { UserName = adminEmail, Email = adminEmail, DisplayName = "Administrator" };
             await userManager.CreateAsync(admin, "Admin123!");
+        }
+
+        // Ensure Admin role exists and assign to admin user
+        var adminRole = "Admin";
+        if (!await roleManager.RoleExistsAsync(adminRole))
+        {
+            await roleManager.CreateAsync(new IdentityRole(adminRole));
+        }
+
+        if (!await userManager.IsInRoleAsync(admin, adminRole))
+        {
+            await userManager.AddToRoleAsync(admin, adminRole);
         }
     }
 }

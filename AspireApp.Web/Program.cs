@@ -11,6 +11,8 @@ builder.AddRedisOutputCache("cache");
 builder.Services.AddRazorComponents()
     .AddInteractiveServerComponents();
 
+// Note: token persistence implemented via JS localStorage from ApiAuthService
+
 builder.Services.AddHttpClient<WeatherApiClient>(client =>
     {
         // This URL uses "https+http://" to indicate HTTPS is preferred over HTTP.
@@ -18,14 +20,23 @@ builder.Services.AddHttpClient<WeatherApiClient>(client =>
         client.BaseAddress = new("https+http://apiservice");
     });
 
-// API HttpClient for AspireApp.ApiService
-builder.Services.AddHttpClient("ApiClient", client =>
+// API HttpClients for AspireApp.ApiService
+builder.Services.AddTransient<AspireApp.Web.Services.RefreshTokenHandler>();
+builder.Services.AddHttpClient("ApiClientNoAuth", client =>
 {
     client.BaseAddress = new("https+http://apiservice");
 });
 
+builder.Services.AddHttpClient("ApiClient", client =>
+{
+    client.BaseAddress = new("https+http://apiservice");
+})
+    .AddHttpMessageHandler<AspireApp.Web.Services.RefreshTokenHandler>();
+
 // Auth/API helper service (scoped per user session)
 builder.Services.AddScoped<AspireApp.Web.Services.ApiAuthService>();
+// CollaborationService registration must remain to support real-time collaboration features.
+builder.Services.AddScoped<AspireApp.Web.Services.CollaborationService>();
 
 var app = builder.Build();
 

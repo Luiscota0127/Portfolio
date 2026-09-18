@@ -5,8 +5,8 @@ using System.Text;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.Extensions.Configuration;
 using AspireApp.ApiService.Models;
-using System.Security.Claims;
 using Microsoft.EntityFrameworkCore;
+using AspireApp.ApiService.Data;
 
 namespace AspireApp.ApiService.Services;
 

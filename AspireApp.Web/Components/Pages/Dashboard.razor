@@ -1,5 +1,6 @@
 @page "/dashboard"
 @inject AspireApp.Web.Services.ApiAuthService AuthService
+@inject AspireApp.Web.Services.CollaborationService Collaboration
 
 <h3>Dashboard</h3>
 
@@ -12,7 +13,9 @@ else
     <ul>
         @foreach (var p in projects)
         {
-            <li>@p.Name - @p.Description</li>
+            <li>
+                <a href="/projects/@p.Id/members">@p.Name</a> - @p.Description
+            </li>
         }
     </ul>
 }
@@ -23,5 +26,28 @@ else
     protected override async Task OnInitializedAsync()
     {
         projects = await AuthService.GetProjectsAsync();
+        Collaboration.OnProjectCreated += HandleProjectCreated;
+        Collaboration.OnProjectUpdated += HandleProjectUpdated;
+        Collaboration.OnProjectDeleted += HandleProjectDeleted;
+        await Collaboration.StartAsync();
+    }
+
+    private Task HandleProjectCreated(AspireApp.Web.Services.ApiAuthService.ProjectDto p)
+    {
+        // reload projects for simplicity
+        _ = InvokeAsync(async () => projects = await AuthService.GetProjectsAsync());
+        return Task.CompletedTask;
+    }
+
+    private Task HandleProjectUpdated(AspireApp.Web.Services.ApiAuthService.ProjectDto p)
+    {
+        _ = InvokeAsync(async () => projects = await AuthService.GetProjectsAsync());
+        return Task.CompletedTask;
+    }
+
+    private Task HandleProjectDeleted(Guid id)
+    {
+        _ = InvokeAsync(async () => projects = await AuthService.GetProjectsAsync());
+        return Task.CompletedTask;
     }
 }

@@ -34,7 +34,7 @@ public class AuthController : ControllerBase
 
         var token = _tokenService.CreateToken(user);
         var refresh = await _tokenService.CreateRefreshTokenAsync(user);
-        return Ok(new AuthResponse { Token = token, RefreshToken = refresh, UserId = user.Id, Email = user.Email });
+        return Ok(new AuthResponse(token, refresh, user.Id, user.Email));
     }
 
     [HttpPost("login")]
@@ -50,7 +50,7 @@ public class AuthController : ControllerBase
 
         var token = _tokenService.CreateToken(user);
         var refresh = await _tokenService.CreateRefreshTokenAsync(user);
-        return Ok(new AuthResponse { Token = token, RefreshToken = refresh, UserId = user.Id, Email = user.Email });
+        return Ok(new AuthResponse(token, refresh, user.Id, user.Email));
     }
 
     [HttpPost("refresh")]
@@ -65,7 +65,7 @@ public class AuthController : ControllerBase
         await _tokenService.RevokeRefreshTokenAsync(model.RefreshToken);
         var newJwt = _tokenService.CreateToken(user);
         var newRefresh = await _tokenService.CreateRefreshTokenAsync(user);
-        return Ok(new AuthResponse { Token = newJwt, RefreshToken = newRefresh, UserId = user.Id, Email = user.Email });
+        return Ok(new AuthResponse(newJwt, newRefresh, user.Id, user.Email));
     }
 
     [HttpPost("logout")]

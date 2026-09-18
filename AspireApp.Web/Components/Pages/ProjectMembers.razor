@@ -1,0 +1,52 @@
+@page "/projects/{ProjectId:guid}/members"
+@inject AspireApp.Web.Services.ApiAuthService Api
+@inject NavigationManager Nav
+
+<h3>Project Members</h3>
+
+@if (members == null)
+{
+    <p>Loading...</p>
+}
+else
+{
+    <ul>
+        @foreach (var m in members)
+        {
+            <li>@m.Email (@m.Role) <button @onclick="() => Remove(m.Id)">Remove</button></li>
+        }
+    </ul>
+}
+
+<EditForm Model="newMember" OnValidSubmit="Add">
+    <InputText @bind-Value="newMember.Email" placeholder="Email" />
+    <InputText @bind-Value="newMember.Role" placeholder="Role (optional)" />
+    <button type="submit">Add member</button>
+</EditForm>
+
+@code {
+    [Parameter]
+    public Guid ProjectId { get; set; }
+
+    private AspireApp.Web.Services.ApiAuthService.ProjectMemberDto[]? members;
+    private NewMemberModel newMember = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        members = await Api.GetProjectMembersAsync(ProjectId);
+    }
+
+    private async Task Add()
+    {
+        var ok = await Api.AddProjectMemberAsync(ProjectId, newMember.Email, newMember.Role);
+        if (ok) members = await Api.GetProjectMembersAsync(ProjectId);
+    }
+
+    private async Task Remove(Guid memberId)
+    {
+        var ok = await Api.RemoveProjectMemberAsync(ProjectId, memberId);
+        if (ok) members = await Api.GetProjectMembersAsync(ProjectId);
+    }
+
+    private class NewMemberModel { public string Email { get; set; } = string.Empty; public string? Role { get; set; } }
+}

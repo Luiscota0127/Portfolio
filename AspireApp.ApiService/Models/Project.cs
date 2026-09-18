@@ -17,4 +17,5 @@ public class Project
     public string? OwnerId { get; set; }
 
     public ICollection<TaskItem> Tasks { get; set; } = new List<TaskItem>();
+    public ICollection<ProjectMember> Members { get; set; } = new List<ProjectMember>();
 }
