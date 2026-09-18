@@ -46,11 +46,11 @@ public class CollaborationService : IAsyncDisposable
         try
         {
             // attempt refresh before starting connection
-            if (await _authService.TryRefreshTokenAsync())
-            {
-                // updated token may be set
-            }
+            await _authService.TryRefreshTokenAsync();
+
+            // start connection and resubscribe to default groups if necessary
             await _hub.StartAsync();
+            // TODO: if the app uses group subscriptions, call server methods to rejoin groups here
         }
         catch (Exception ex)
         {
