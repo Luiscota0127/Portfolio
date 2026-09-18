@@ -14,6 +14,7 @@ public class CollaborationService : IAsyncDisposable
     public event Func<ApiAuthService.ProjectDto, Task>? OnProjectCreated;
     public event Func<ApiAuthService.ProjectDto, Task>? OnProjectUpdated;
     public event Func<Guid, Task>? OnProjectDeleted;
+    public event Func<Guid, string?, string?, Task>? OnProjectMemberAdded;
 
     public event Func<object, Task>? OnTaskCreated;
     public event Func<object, Task>? OnTaskUpdated;
@@ -40,10 +41,20 @@ public class CollaborationService : IAsyncDisposable
         _hub.On<ApiAuthService.ProjectDto>("ProjectCreated", async p => await (OnProjectCreated?.Invoke(p) ?? Task.CompletedTask));
         _hub.On<ApiAuthService.ProjectDto>("ProjectUpdated", async p => await (OnProjectUpdated?.Invoke(p) ?? Task.CompletedTask));
 
+        _hub.On<Guid, string, string>("ProjectMemberAdded", async (projectId, userId, role) =>
+        {
+            if (OnProjectMemberAdded != null) await OnProjectMemberAdded.Invoke(projectId, userId, role);
+        });
+
         _hub.On<object>("TaskCreated", async obj => await (OnTaskCreated?.Invoke(obj) ?? Task.CompletedTask));
         _hub.On<object>("TaskUpdated", async obj => await (OnTaskUpdated?.Invoke(obj) ?? Task.CompletedTask));
         _hub.On<Guid>("TaskDeleted", async id => await (OnTaskDeleted?.Invoke(id) ?? Task.CompletedTask));
+
+        // maintain a set of subscribed project ids for resubscription after reconnect
+        _subscribedProjects = new HashSet<Guid>();
     }
+
+    private readonly HashSet<Guid> _subscribedProjects;
 
         public async Task StartAsync()
         {
@@ -53,9 +64,21 @@ public class CollaborationService : IAsyncDisposable
                 await _authService.TryRefreshTokenAsync();
 
                 // start connection and resubscribe to default groups if necessary
-                await _hub.StartAsync();
+            // wire up reconnect events to resubscribe
+            _hub.Reconnecting += async ex =>
+            {
+                await NotifyConnectionChanged(ConnectionState.Reconnecting);
+            };
+
+            _hub.Reconnected += async connectionId =>
+            {
                 await NotifyConnectionChanged(ConnectionState.Connected);
-                // TODO: if the app uses group subscriptions, call server methods to rejoin groups here
+                // resubscribe to project groups
+                await ResubscribeAllAsync();
+            };
+
+            await _hub.StartAsync();
+            await NotifyConnectionChanged(ConnectionState.Connected);
             }
             catch (Exception ex)
             {
@@ -79,5 +102,50 @@ public class CollaborationService : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await _hub.DisposeAsync();
+    }
+
+    public async Task SubscribeProjectAsync(Guid projectId)
+    {
+        if (_subscribedProjects.Add(projectId))
+        {
+            try
+            {
+                await _hub.InvokeAsync("JoinProjectGroup", projectId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error subscribing to project {ProjectId}", projectId);
+            }
+        }
+    }
+
+    public async Task UnsubscribeProjectAsync(Guid projectId)
+    {
+        if (_subscribedProjects.Remove(projectId))
+        {
+            try
+            {
+                await _hub.InvokeAsync("LeaveProjectGroup", projectId);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error unsubscribing from project {ProjectId}", projectId);
+            }
+        }
+    }
+
+    private async Task ResubscribeAllAsync()
+    {
+        foreach (var pid in _subscribedProjects.ToArray())
+        {
+            try
+            {
+                await _hub.InvokeAsync("JoinProjectGroup", pid);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Failed to resubscribe to project {ProjectId}", pid);
+            }
+        }
     }
 }
