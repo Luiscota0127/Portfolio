@@ -28,7 +28,21 @@ jobs:
         run: dotnet build AspireApp.slnx --configuration Release --no-restore
 
       - name: Run tests (ApiService.Tests)
-        run: dotnet test AspireApp.ApiService.Tests/AspireApp.ApiService.Tests.csproj --no-build -c Release --verbosity minimal
+        run: dotnet test AspireApp.ApiService.Tests/AspireApp.ApiService.Tests.csproj --no-build -c Release --verbosity minimal --collect:"XPlat Code Coverage"
+
+      - name: Install reportgenerator global tool
+        run: |
+          dotnet tool install --global dotnet-reportgenerator-globaltool --version 5.1.24 || true
+          echo "$HOME/.dotnet/tools" >> $GITHUB_PATH
+
+      - name: Generate coverage report (HTML)
+        run: reportgenerator -reports:"**/coverage.cobertura.xml" -targetdir:coverage-report -reporttypes:Html
+
+      - name: Upload coverage report artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage-report
 
       - name: Run tests (solution)
         run: dotnet test AspireApp.slnx --no-build -c Release --verbosity minimal

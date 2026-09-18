@@ -62,8 +62,9 @@ public class RefreshTokenHandler : DelegatingHandler
         foreach (var header in req.Headers)
             clone.Headers.TryAddWithoutValidation(header.Key, header.Value);
 
-        foreach (var prop in req.Properties)
-            clone.Properties.Add(prop);
+        // Note: HttpRequestMessage.Properties is obsolete. Do not copy it.
+        // HttpRequestMessage.Options does not expose a public enumerator for keys,
+        // so we avoid cloning arbitrary request options to prevent relying on internal APIs.
 
         return clone;
     }
